@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCQ Practice</title>
+  
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['[', ']']]
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 650px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.5;
+      color: #111;
+      background: #fff;
+    }
+
+    .topic-bar {
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topic-bar select {
+      padding: 6px 12px;
+      font-size: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+
+    .question-box {
+      font-size: 18px;
+      margin-bottom: 20px;
+      padding: 10px 0;
+    }
+
+    .options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .option-btn {
+      text-align: left;
+      padding: 12px 15px;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      background: #eee;
+    }
+
+    .option-btn.correct {
+      background: #d4edda;
+      border-color: #c3e6cb;
+      color: #155724;
+      font-weight: bold;
+    }
+
+    .option-btn.incorrect {
+      background: #f8d7da;
+      border-color: #f5c6cb;
+      color: #721c24;
+    }
+
+    .feedback {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .feedback.show {
+      display: block;
+    }
+
+    .feedback.correct-bg {
+      background: #e2f0d9;
+      color: #2e5b1e;
+    }
+
+    .feedback.incorrect-bg {
+      background: #fce4d6;
+      color: #843c0c;
+    }
+
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      font-size: 15px;
+      border: 1px solid #333;
+      background: #333;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: #333;
+    }
+
+    .completed-box {
+      text-align: center;
+      padding: 40px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="topic-bar">
+    <label for="topic-select"><strong>Select Topic:</strong></label>
+    <select id="topic-select" onchange="switchTopic(this.value)"></select>
+  </div>
+
+  <div id="quiz-container">
+    <div class="header">
+      <span id="progress">Question 1</span>
+      <span id="score">Score: 0/0</span>
+    </div>
+
+    <div id="question" class="question-box"></div>
+    <div id="options" class="options"></div>
+    <div id="feedback" class="feedback"></div>
+
+    <div class="controls">
+      <button id="reset-btn" class="btn btn-secondary" onclick="resetQuiz()">New Problem Set</button>
+      <button id="next-btn" class="btn" onclick="nextQuestion()" disabled>Next Question</button>
+    </div>
+  </div>
+
+  <div id="completed-container" class="completed-box" style="display: none;">
+    <h2>Topic Completed!</h2>
+    <p id="final-score" style="font-size: 20px;"></p>
+    <button class="btn" onclick="resetQuiz()">Generate New Set</button>
+  </div>
+
+  <!-- LOAD THE EXTERNAL QUESTION BANK -->
+  <script src="questions.js"></script>
+
+  <!-- APP ENGINE LOGIC -->
+  <script>
+    const QUESTIONS_PER_BATCH = 10;
+    let currentTopic = '';
+    let activeQuestions = [];
+    let shuffledDefinitions = [];
+    let nextDefinitionIndex = 0;
+    let questionOffset = 0;
+    let currentIndex = 0;
+    let score = 0;
+    let answeredCount = 0;
+    let optionSelected = false;
+
+    function populateTopicDropdown() {
+      const select = document.getElementById('topic-select');
+      select.innerHTML = '';
+      const topics = Object.keys(topicDefinitions);
+      
+      if (topics.length === 0) return;
+      currentTopic = topics[0];
+
+      topics.forEach(topic => {
+        const option = document.createElement('option');
+        option.value = topic;
+        option.textContent = topic;
+        select.appendChild(option);
+      });
+    }
+
+    function switchTopic(newTopic) {
+      currentTopic = newTopic;
+      resetQuiz();
+    }
+
+    function loadQuestionsForTopic() {
+      shuffledDefinitions = shuffleArray(topicDefinitions[currentTopic] || []);
+      nextDefinitionIndex = 0;
+      loadNextBatch();
+    }
+
+    function loadNextBatch() {
+      questionOffset = nextDefinitionIndex;
+      const batch = shuffledDefinitions.slice(
+        nextDefinitionIndex,
+        nextDefinitionIndex + QUESTIONS_PER_BATCH
+      );
+      nextDefinitionIndex += batch.length;
+      activeQuestions = batch.map(item => typeof item === 'function' ? item() : item);
+    }
+
+    function renderQuestion() {
+      const q = activeQuestions[currentIndex];
+      if (!q) return;
+
+      document.getElementById('progress').innerText = `Question ${questionOffset + currentIndex + 1} of ${shuffledDefinitions.length}`;
+      document.getElementById('score').innerText = `Score: ${score}/${answeredCount}`;
+      document.getElementById('question').innerHTML = q.question;
+
+      const feedbackEl = document.getElementById('feedback');
+      feedbackEl.className = 'feedback';
+      feedbackEl.style.display = 'none';
+      document.getElementById('next-btn').disabled = true;
+      optionSelected = false;
+
+      const optionsContainer = document.getElementById('options');
+      optionsContainer.innerHTML = '';
+
+      q.options.forEach((optText, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.innerHTML = `${String.fromCharCode(65 + index)}. ${optText}`;
+        btn.onclick = () => selectOption(index);
+        optionsContainer.appendChild(btn);
+      });
+
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        MathJax.typesetPromise();
+      }
+    }
+
+    function selectOption(selectedIndex) {
+      if (optionSelected) return;
+      optionSelected = true;
+
+      const q = activeQuestions[currentIndex];
+      const isCorrect = selectedIndex === q.answer;
+
+      answeredCount++;
+      if (isCorrect) score++;
+
+      document.getElementById('score').innerText = `Score: ${score}/${answeredCount}`;
+
+      const buttons = document.querySelectorAll('.option-btn');
+      buttons.forEach((btn, idx) => {
+        btn.disabled = true;
+        if (idx === q.answer) {
+          btn.classList.add('correct');
+        } else if (idx === selectedIndex) {
+          btn.classList.add('incorrect');
+        }
+      });
+
+      const feedbackEl = document.getElementById('feedback');
+      feedbackEl.style.display = 'block';
+      if (isCorrect) {
+        feedbackEl.className = 'feedback show correct-bg';
+        feedbackEl.innerHTML = `<strong>Correct!</strong> ${q.explanation || ''}`;
+      } else {
+        feedbackEl.className = 'feedback show incorrect-bg';
+        feedbackEl.innerHTML = `<strong>Incorrect.</strong> ${q.explanation || ''}`;
+      }
+
+      document.getElementById('next-btn').disabled = false;
+
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        MathJax.typesetPromise();
+      }
+    }
+
+    function nextQuestion() {
+      currentIndex++;
+      if (currentIndex < activeQuestions.length) {
+        renderQuestion();
+      } else if (nextDefinitionIndex < shuffledDefinitions.length) {
+        loadNextBatch();
+        currentIndex = 0;
+        renderQuestion();
+      } else {
+        showCompletionScreen();
+      }
+    }
+
+    function showCompletionScreen() {
+      document.getElementById('quiz-container').style.display = 'none';
+      const completedContainer = document.getElementById('completed-container');
+      completedContainer.style.display = 'block';
+
+      const pct = Math.round((score / answeredCount) * 100);
+      document.getElementById('final-score').innerHTML = `You scored <strong>${score} / ${answeredCount}</strong> (${pct}%) in <em>${currentTopic}</em>.`;
+    }
+
+    function resetQuiz() {
+      currentIndex = 0;
+      score = 0;
+      answeredCount = 0;
+      loadQuestionsForTopic();
+      document.getElementById('quiz-container').style.display = 'block';
+      document.getElementById('completed-container').style.display = 'none';
+      renderQuestion();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      const key = e.key.toUpperCase();
+      if (['A', 'B', 'C', 'D'].includes(key) && !optionSelected) {
+        const optionIndex = key.charCodeAt(0) - 65;
+        const buttons = document.querySelectorAll('.option-btn');
+        if (buttons[optionIndex]) selectOption(optionIndex);
+      } else if ((e.key === ' ' || e.key === 'Enter') && optionSelected) {
+        nextQuestion();
+      }
+    });
+
+    populateTopicDropdown();
+    resetQuiz();
+  </script>
+</body>
+</html>
